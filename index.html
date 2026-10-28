@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>CMWIM Task Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a working board — summary strip, filter bar, then one section per initiative with dense task rows. */
+:root{
+  --bg:#f5f7f6; --surface:#ffffff; --fg:#14231f; --muted:#56655f; --line:#d9e1de;
+  --indigo:#0f5f5a; --indigo-soft:#e1f0ee; --teal:#8a3b6b; --teal-soft:#f6e8f0;
+  --violet:#7c3aed; --violet-soft:#f1eafe; --navy:#2a3a40; --navy-soft:#e7ecee;
+  --warn:#b45309; --warn-soft:#fdf0e1; --bad:#c2410c; --good:#15803d; --good-soft:#e5f4ea;
+  --f-display:"Chivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",Helvetica,Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101917; --surface:#18231f; --fg:#e6efec; --muted:#9db0a9; --line:#2c3b36;
+  --indigo:#6fd3c6; --indigo-soft:#173a35; --teal:#e7a3cb; --teal-soft:#3a2131;
+  --violet:#c4a3ff; --violet-soft:#2d2245; --navy:#c6d3d6; --navy-soft:#24302f;
+  --warn:#f5b26b; --warn-soft:#3a2a17; --bad:#ff9a6b; --good:#7fd69a; --good-soft:#1b3022; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);padding:20px 16px 48px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--f-display);text-wrap:balance;margin:0}
+h1{font-size:clamp(26px,4vw,34px);font-weight:800;color:var(--indigo);letter-spacing:-.01em}
+.sub{color:var(--muted);margin:4px 0 0;max-width:65ch}
+a{color:var(--indigo)}
+.summary{display:flex;flex-wrap:wrap;gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:120px;flex:1 1 120px}
+.stat b{display:block;font:600 22px/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.stat.bad b{color:var(--bad)} .stat.warn b{color:var(--warn)} .stat.good b{color:var(--good)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px}
+.bar label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+select,input{font:inherit;color:inherit}
+select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
+.chk{display:flex;align-items:center;gap:6px;font-size:14px}
+.editlink{margin-left:auto;font-size:14px;font-weight:600}
+section.init{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.ihead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ihead h2{font-size:18px;font-weight:600}
+.tagS{font:500 11px/1 var(--f-mono);letter-spacing:.05em;padding:4px 6px;border-radius:4px;text-transform:uppercase}
+.NAT{background:var(--indigo-soft);color:var(--indigo)} .WES{background:var(--teal-soft);color:var(--teal)}
+.ALL{background:var(--navy-soft);color:var(--navy)}
+.idea{font:500 11px/1 var(--f-mono);letter-spacing:.05em;padding:3px 5px;border-radius:4px;border:1px dashed var(--muted);color:var(--muted);text-transform:uppercase}
+.when{color:var(--muted);font-size:13px}
+.prog{margin-left:auto;font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.ideas{border-bottom:1px solid var(--line);padding:8px 14px;background:var(--bg)}
+.ideas summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--teal)}
+.ideas ol{margin:8px 0 4px;padding-left:20px;max-width:75ch} .ideas li{margin:3px 0}
+ul.tasks{list-style:none;margin:0;padding:0}
+li.task{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line)}
+li.task:last-child{border-bottom:0}
+.pill{font:500 12px var(--f-mono);border-radius:999px;padding:4px 10px;white-space:nowrap;min-width:92px;text-align:center}
+.pill.todo{background:var(--navy-soft);color:var(--navy)}
+.pill.doing{background:var(--warn-soft);color:var(--warn)}
+.pill.done{background:var(--good-soft);color:var(--good)}
+.tt{min-width:0}
+.tt .title{font-weight:500}
+li.task.isdone .title{text-decoration:line-through;color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px;color:var(--muted);margin-top:2px}
+.owner{font-weight:500;color:var(--fg)}
+.due{font-family:var(--f-mono);font-size:12px}
+.due.over{color:var(--bad);font-weight:600} .due.soon{color:var(--warn);font-weight:600}
+.notes{font-size:13px;color:var(--muted);margin-top:2px;max-width:75ch}
+.empty{padding:14px;color:var(--muted);font-size:14px}
+/* Timeline (Gantt): a label column beside a scrolling date track; initiatives are bars, tasks are diamonds on their due date. */
+.views{display:inline-flex}
+.views button{border-radius:0;padding:5px 10px;font-size:13px}
+.views button:first-child{border-radius:6px 0 0 6px} .views button:last-child{border-radius:0 6px 6px 0;border-left:0}
+.views button[aria-pressed=true]{background:var(--indigo);border-color:var(--indigo);color:var(--surface);font-weight:600}
+.tl{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+.tl-grid{display:grid;grid-template-columns:min(280px,42vw) auto;min-width:min-content}
+.tl-lab{position:sticky;left:0;z-index:2;background:var(--surface);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:5px 10px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-lab.grp{font-weight:600;background:var(--bg)}
+.tl-lab.done{color:var(--muted);text-decoration:line-through}
+.tl-track{position:relative;border-bottom:1px solid var(--line);height:30px}
+.tl-track.grp{background:var(--bg)}
+.tl-head{position:relative;height:30px;border-bottom:1px solid var(--line);font:500 11px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tl-mon{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);padding:8px 6px}
+.tl-line{position:absolute;top:0;bottom:0;border-left:1px dashed var(--line);pointer-events:none}
+.tl-today{position:absolute;top:0;bottom:0;border-left:2px solid var(--bad);pointer-events:none;z-index:1}
+.tl-bar{position:absolute;top:9px;height:12px;border-radius:6px;min-width:6px;opacity:.85}
+.tl-bar.NAT{background:var(--indigo)} .tl-bar.WES{background:var(--teal)} .tl-bar.ALL{background:var(--navy)}
+/* No-event dates (exams, Ramadan, Eid) shade the timeline. */
+.tl-avoid{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--warn-soft) 0 4px,transparent 4px 8px);pointer-events:none}
+.tl-head .tl-avoid{z-index:0}
+.tl-key{display:flex;flex-wrap:wrap;gap:4px 14px;padding:10px 14px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)}
+.tl-key b{font-weight:600;color:var(--warn)}
+.tl-dot{position:absolute;top:9px;width:12px;height:12px;margin-left:-6px;transform:rotate(45deg);border-radius:2px;background:var(--navy)}
+.tl-dot.doing{background:var(--warn)} .tl-dot.done{background:var(--good);opacity:.6} .tl-dot.over{background:var(--bad)}
+.tl-note{padding:10px 14px;font-size:13px;color:var(--muted)}
+input[type=text],input[type=password],input[type=date],textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;font:inherit;color:inherit}
+textarea{font:inherit;color:inherit}
+button{font:inherit;color:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);padding:6px 10px}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
+span.pill{display:inline-block}
+select.pill{border:0;cursor:pointer;padding-right:6px;text-align:left}
+.primary{background:var(--indigo);border-color:var(--indigo);color:var(--surface);font-weight:600}
+.status-line{font-size:13px;color:var(--muted);min-height:1.2em}
+.unlock{display:flex;gap:6px;align-items:center}
+.add{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px}
+.add summary{cursor:pointer;font-weight:600;color:var(--indigo)}
+.addgrid,.edit{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr;gap:8px}
+.addgrid{margin-top:10px}
+.addgrid .full,.edit .full{grid-column:1/-1}
+.edit{grid-column:1/-1;padding-top:6px}
+.edit .row{display:flex;gap:8px;justify-content:flex-end}
+@media (max-width:720px){.addgrid,.edit{grid-template-columns:1fr 1fr}}
+li.task.can{grid-template-columns:auto 1fr auto}
+.acts{display:flex;gap:4px}
+.acts button{padding:3px 8px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CMWIM Task Board</h1>
+    <p class="sub">Canadian Muslim Women in Medicine, 2026-27. Everything here depends on team capacity and member interest, so events can be scaled back, pushed to next year or dropped.</p>
+  </header>
+
+  <div class="summary" id="summary" aria-live="polite"></div>
+
+  <div class="bar">
+    <label for="fInit">Initiative</label>
+    <select id="fInit"><option value="">All</option></select>
+    <label for="fOwner">Owner</label>
+    <select id="fOwner"><option value="">Everyone</option></select>
+    <span class="views" role="group" aria-label="View"><button type="button" id="vList" aria-pressed="true">List</button><button type="button" id="vTl" aria-pressed="false">Timeline</button></span>
+    <label for="fStat">Status</label>
+    <select id="fStat"><option value="">All</option><option value="open">Not done</option><option value="todo">To do</option><option value="doing">In progress</option><option value="done">Done</option></select>
+    <span class="status-line" id="msg"></span>
+    <span class="editlink" id="lockBox"></span>
+  </div>
+
+  <details class="add" id="addBox" hidden>
+    <summary>Add a task</summary>
+    <form id="addForm" class="addgrid">
+      <input type="text" id="aTitle" placeholder="What needs doing" required aria-label="Task">
+      <select id="aInit" aria-label="Initiative"></select>
+      <input type="text" id="aOwner" list="owners" placeholder="Owner" aria-label="Owner">
+      <input type="date" id="aDue" aria-label="Due date">
+      <textarea id="aNotes" class="full" rows="2" placeholder="Notes (optional)" aria-label="Notes"></textarea>
+      <div class="full"><button class="primary" type="submit">Add task</button></div>
+    </form>
+  </details>
+  <datalist id="owners"></datalist>
+
+  <div id="board"><p class="empty">Loading tasks…</p></div>
+</div>
+
+<script>
+const INITS=[
+ {id:'mentor',name:'Mentorship Program',when:'Darah + Mahum · one match round Jan 18-29',s:'NAT'},
+ {id:'handbook',name:'Mentorship Handbook',when:'Guide for mentor pairs, after the January match',s:'NAT'},
+ {id:'talks',name:'Virtual Talk Series',when:'Free · Nov, Mar, Apr · Tue/Wed evenings',s:'NAT'},
+ {id:'agm',name:'School Teams & AGM',when:'Reconnect Sat Oct 31, 7 PM ET · AGM late June',s:'NAT'},
+ {id:'evening',name:'Mentorship Networking Evening',when:'After May 19 · with ISNA Cares + MMAC chapters, who cover the cost',s:'NAT'},
+ {id:'panel',name:'Physician Panel',when:'Mon Oct 26 · Faith, Identity & the White Coat · with Western MMAC',s:'WES'},
+ {id:'mixer',name:'Café Mixer',when:'Sat Nov 21 · 11 AM to about 2 PM · Noor Simsam\'s lounge',s:'WES',
+  ideasLabel:'The plan for the day',
+  ideas:['Students, residents and physicians, with a make-your-own matcha + latte bar.',
+   'Syrups and a drink menu with named drinks (Lana), the espresso machine and Lavazza beans.',
+   'Baked goods from Angelo\'s or home-baked.',
+   'A sticky-note tips board that becomes a blog post afterwards.',
+   'Welcome sign on the mirror with Darah\'s vinyl lettering, plus stickers.',
+   'Budget $150-200, the only planned spending this year. The lounge is free. Keep every receipt.']},
+ {id:'wim',name:'Women in Medicine Collab',when:'Date TBD · e.g. a women in surgery panel with a Muslim perspective',s:'WES'},
+ {id:'premed',name:'Premed High School Talk',when:'March · Windsor · with MedReach · led by Lana',s:'WES'},
+ {id:'social',name:'Other Social',when:'April · with Western MMAC, if there is interest',s:'WES',idea:true},
+ {id:'outreach',name:'Outreach & Partners',when:'All year · Instagram, WhatsApp, school teams, partners',s:'ALL'},
+ {id:'ops',name:'Team & Operations',when:'All year · roles, inbox, budget, report, handover',s:'ALL'},
+];
+// Dates to keep events off, from the plan's month-by-month calendar.
+const AVOID=[
+ {from:'2026-10-14',to:'2026-10-14',name:'Progress Test 1'},
+ {from:'2026-12-09',to:'2026-12-09',name:'Mock anatomy assessment'},
+ {from:'2026-12-17',to:'2026-12-17',name:'Progress Test 2'},
+ {from:'2027-01-15',to:'2027-01-15',name:'Anatomy lab assessment'},
+ {from:'2027-02-05',to:'2027-02-05',name:'2nd-year final exam'},
+ {from:'2027-02-08',to:'2027-03-10',name:'Ramadan + Eid al-Fitr (about)'},
+ {from:'2027-05-16',to:'2027-05-19',name:'Eid al-Adha (about)'},
+];
+const SLABEL={todo:'To do',doing:'In progress',done:'Done'};
+const STATUS=Object.keys(SLABEL);
+const OWNERS=['Noor Simsam','Lana','Noor Suddle','Darah','Mahum','Darah & Mahum','Noor Simsam & Lana','Outreach','Admin','Whole team','Unassigned'];
+// The Tasks tab of the master Google Sheet, read as CSV. Until it is set, the board shows tasks.json.
+const SHEET='';
+// Web app URL of apps-script/Code.gs, deployed from the Sheet. Reads and writes go through it.
+const API='';
+const $=id=>document.getElementById(id);
+let tasks=[], loadFailed=false, editing=null, pass=null, view='list';
+const pref=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}};
+
+function todayISO(){const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)}
+function daysUntil(iso){if(!iso)return null;return Math.round((new Date(iso+'T12:00')-new Date(todayISO()+'T12:00'))/864e5)}
+function fmtDate(iso){if(!iso)return '';return new Date(iso+'T12:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'})}
+function el(tag,attrs={},...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else e.setAttribute(k,v)}for(const c of kids)if(c!=null)e.append(c);return e}
+const owners=t=>(t.owner||'Unassigned').split(/\s*&\s*/).map(s=>s.trim());
+
+function say(t){$('msg').textContent=t;clearTimeout(say.t);say.t=setTimeout(()=>$('msg').textContent='',4000)}
+
+for(const i of INITS){$('fInit').append(el('option',{value:i.id,text:i.name}));$('aInit').append(el('option',{value:i.id,text:i.name}))}
+for(const o of OWNERS)$('owners').append(el('option',{value:o}));
+$('fInit').value=pref('cmwim.fInit')||'';$('fStat').value=pref('cmwim.fStat')||'';
+const statusOK=(t,fs)=>!fs||(fs==='open'?t.status!=='done':t.status===fs);
+$('fInit').onchange=()=>{pref('cmwim.fInit',$('fInit').value);render()};
+$('fOwner').onchange=()=>{pref('cmwim.fOwner',$('fOwner').value);render()};
+$('fStat').onchange=()=>{pref('cmwim.fStat',$('fStat').value);render()};
+function setView(v){view=v;pref('cmwim.view',v);$('vList').setAttribute('aria-pressed',v==='list');$('vTl').setAttribute('aria-pressed',v==='tl');render()}
+$('vList').onclick=()=>setView('list');$('vTl').onclick=()=>setView('tl');
+view=pref('cmwim.view')==='tl'?'tl':'list';$('vList').setAttribute('aria-pressed',view==='list');$('vTl').setAttribute('aria-pressed',view==='tl');
+
+const PX_DAY=6, DAY=864e5;
+const dayNum=iso=>Math.round(new Date(iso+'T12:00')/DAY);
+function timeline(fi,fo,fs){
+ const known=new Set(INITS.map(i=>i.id));
+ const rows=[];let undated=0;
+ for(const g of [...INITS,{id:'_other',name:'Other',s:'ALL'}]){
+  if(fi&&fi!==g.id)continue;
+  let list=tasks.filter(t=>g.id==='_other'?!known.has(t.initiative):t.initiative===g.id);
+  if(fo)list=list.filter(t=>owners(t).includes(fo));
+  list=list.filter(t=>statusOK(t,fs));
+  undated+=list.filter(t=>!t.due).length;
+  list=list.filter(t=>t.due).sort((a,b)=>a.due.localeCompare(b.due));
+  if(list.length)rows.push({g,list});
+ }
+ const wrap=el('div',{class:'tl'});
+ if(!rows.length){wrap.append(el('p',{class:'tl-note',text:'No dated tasks match these filters.'}));return wrap}
+ const all=rows.flatMap(r=>r.list.map(t=>dayNum(t.due))),today=dayNum(todayISO());
+ // Whole months from the earliest of today and the first due date to the last due date.
+ const s=new Date(Math.min(today,...all)*DAY),e=new Date(Math.max(today,...all)*DAY);
+ const start=dayNum(new Date(s.getFullYear(),s.getMonth(),1,12).toISOString().slice(0,10));
+ const endD=new Date(e.getFullYear(),e.getMonth()+1,1,12),end=dayNum(endD.toISOString().slice(0,10));
+ const x=d=>(d-start)*PX_DAY,width=(end-start)*PX_DAY;
+ const grid=el('div',{class:'tl-grid'});
+ const head=el('div',{class:'tl-head',style:'width:'+width+'px'}),lines=[];
+ for(let m=new Date(s.getFullYear(),s.getMonth(),1,12);m<endD;m=new Date(m.getFullYear(),m.getMonth()+1,1,12)){
+  const d=Math.round(m/DAY),next=Math.round(new Date(m.getFullYear(),m.getMonth()+1,1,12)/DAY);
+  head.append(el('div',{class:'tl-mon',style:'left:'+x(d)+'px;width:'+(next-d)*PX_DAY+'px',text:m.toLocaleDateString('en-CA',{month:'short',year:'2-digit'})}));
+  lines.push(x(d));
+ }
+ const track=(cls)=>{const tr=el('div',{class:'tl-track'+(cls?' '+cls:''),style:'width:'+width+'px'});
+  lines.forEach(l=>tr.append(el('div',{class:'tl-line',style:'left:'+l+'px'})));
+  for(const a of AVOID){const l=Math.max(dayNum(a.from),start),r=Math.min(dayNum(a.to)+1,end);
+   if(r>l)tr.append(el('div',{class:'tl-avoid',style:'left:'+x(l)+'px;width:'+(r-l)*PX_DAY+'px',title:'No events: '+a.name}))}
+  tr.append(el('div',{class:'tl-today',style:'left:'+x(today)+'px'}));return tr};
+ grid.append(el('div',{class:'tl-lab grp',text:'Initiative / task'}),head);
+ for(const{g,list}of rows){
+  const a=dayNum(list[0].due),b=dayNum(list[list.length-1].due);
+  const gt=track('grp');gt.append(el('div',{class:'tl-bar '+g.s,style:'left:'+x(a)+'px;width:'+(Math.max(b-a,1))*PX_DAY+'px',title:g.name+': '+fmtDate(list[0].due)+' to '+fmtDate(list[list.length-1].due)}));
+  grid.append(el('div',{class:'tl-lab grp',text:g.name,title:g.name}),gt);
+  for(const t of list){
+   const n=daysUntil(t.due),cls=t.status==='done'?'done':n<0?'over':t.status;
+   const tr=track();tr.append(el('div',{class:'tl-dot '+cls,style:'left:'+x(dayNum(t.due))+'px',title:t.title+'\n'+(t.owner||'Unassigned')+' · '+fmtDate(t.due)+' · '+SLABEL[t.status]}));
+   grid.append(el('div',{class:'tl-lab'+(t.status==='done'?' done':''),text:t.title,title:t.title+' ('+(t.owner||'Unassigned')+')'}),tr);
+  }
+ }
+ wrap.append(grid);
+ const key=el('div',{class:'tl-key'},el('b',{text:'Striped = no events:'}));
+ AVOID.filter(a=>dayNum(a.to)>=start&&dayNum(a.from)<end).forEach(a=>key.append(el('span',{text:a.name+' ('+(a.from===a.to?fmtDate(a.from):fmtDate(a.from)+' to '+fmtDate(a.to))+')'})));
+ wrap.append(key);
+ if(undated)wrap.append(el('p',{class:'tl-note',text:undated+' task'+(undated>1?'s have':' has')+' no due date and '+(undated>1?'are':'is')+' only in the List view.'}));
+ // Open scrolled so today is near the left edge.
+ requestAnimationFrame(()=>{wrap.scrollLeft=Math.max(0,x(today)-120)});
+ return wrap;
+}
+
+function refreshOwners(){const cur=pref('cmwim.fOwner')||'';const set=new Set();tasks.forEach(t=>owners(t).forEach(n=>set.add(n)));
+ const sel=$('fOwner');sel.replaceChildren(el('option',{value:'',text:'Everyone'}));[...set].sort().forEach(n=>sel.append(el('option',{value:n,text:n})));sel.value=set.has(cur)?cur:''}
+
+function render(){
+ const fi=$('fInit').value,fo=$('fOwner').value,fs=$('fStat').value;
+ const open=tasks.filter(t=>t.status!=='done');
+ const over=open.filter(t=>t.due&&daysUntil(t.due)<0).length, week=open.filter(t=>t.due&&daysUntil(t.due)>=0&&daysUntil(t.due)<=7).length;
+ const doing=tasks.filter(t=>t.status==='doing').length, done=tasks.filter(t=>t.status==='done').length;
+ $('summary').replaceChildren(
+  el('div',{class:'stat'+(over?' bad':'')},el('b',{text:over}),el('span',{text:'Overdue'})),
+  el('div',{class:'stat'+(week?' warn':'')},el('b',{text:week}),el('span',{text:'Due in 7 days'})),
+  el('div',{class:'stat'},el('b',{text:doing}),el('span',{text:'In progress'})),
+  el('div',{class:'stat good'},el('b',{text:done+' / '+tasks.length}),el('span',{text:'Done'})));
+ const board=$('board');board.replaceChildren();
+ if(!tasks.length){board.append(el('p',{class:'empty',text:loadFailed?'Tasks could not load. Try reloading.':'No tasks yet.'}));return}
+ if(view==='tl'){board.append(timeline(fi,fo,fs));return}
+ const known=new Set(INITS.map(i=>i.id));
+ for(const g of [...INITS,{id:'_other',name:'Other',when:'',s:'ALL'}]){
+  if(fi&&fi!==g.id)continue;
+  let list=tasks.filter(t=>g.id==='_other'?!known.has(t.initiative):t.initiative===g.id);
+  if(!list.length&&g.id==='_other')continue;
+  const total=list.length,nd=list.filter(t=>t.status==='done').length;
+  if(fo)list=list.filter(t=>owners(t).includes(fo));
+  list=list.filter(t=>statusOK(t,fs));
+  if((fo||fs)&&!list.length)continue;
+  list.sort((a,b)=>(a.status==='done')-(b.status==='done')||(a.due||'9999').localeCompare(b.due||'9999')||(a.title||'').localeCompare(b.title||''));
+  const sec=el('section',{class:'init','aria-label':g.name});
+  sec.append(el('div',{class:'ihead'},el('span',{class:'tagS '+g.s,text:g.s}),el('h2',{text:g.name}),g.idea?el('span',{class:'idea',text:'Idea'}):null,el('span',{class:'when',text:g.when}),el('span',{class:'prog',text:total?nd+'/'+total+' done':''})));
+  if(g.ideas){const d=el('details',{class:'ideas'},el('summary',{text:g.ideasLabel}));const ol=el('ol');g.ideas.forEach(x=>ol.append(el('li',{text:x})));d.append(ol);sec.append(d)}
+  const ul=el('ul',{class:'tasks'});
+  if(!list.length)ul.append(el('li',{class:'empty',text:'No tasks yet.'}));
+  for(const t of list)ul.append(taskRow(t));
+  sec.append(ul);board.append(sec);
+ }
+}
+
+function taskRow(t){
+ const st=SLABEL[t.status]?t.status:'todo';
+ const li=el('li',{class:'task'+(st==='done'?' isdone':'')+(pass?' can':'')});
+ const meta=el('div',{class:'meta'},el('span',{class:'owner',text:t.owner||'Unassigned'}));
+ if(t.due){const n=daysUntil(t.due);let cls='due',lab=fmtDate(t.due);if(st!=='done'){if(n<0){cls+=' over';lab+=' · overdue'}else if(n<=7){cls+=' soon';lab+=n===0?' · today':' · in '+n+'d'}}meta.append(el('span',{class:cls,text:lab}))}
+ else meta.append(el('span',{class:'due',text:'No date'}));
+ const tt=el('div',{class:'tt'},el('div',{class:'title',text:t.title||'(untitled)'}),meta);
+ if(t.notes)tt.append(el('div',{class:'notes',text:t.notes}));
+ let pill;
+ if(pass){
+  pill=el('select',{class:'pill '+st,'aria-label':'Status'});
+  STATUS.forEach(s=>pill.append(el('option',{value:s,text:SLABEL[s]})));
+  pill.value=st;pill.onchange=()=>setStatus(t,pill.value);
+ }else pill=el('span',{class:'pill '+st,text:SLABEL[st]});
+ li.append(pill,tt);
+ if(pass){
+  const edit=el('button',{type:'button',text:'Edit'}),delb=el('button',{type:'button',text:'Delete'});
+  edit.onclick=()=>{editing=editing===t.id?null:t.id;render()};
+  delb.onclick=()=>confirmDelete(t,li);
+  li.append(el('div',{class:'acts'},edit,delb));
+  if(editing===t.id)li.append(editForm(t));
+ }
+ return li;
+}
+
+function editForm(t){
+ const f=el('form',{class:'edit'});
+ const ti=el('input',{type:'text','aria-label':'Task'});ti.value=t.title;
+ const ii=el('select',{'aria-label':'Initiative'});INITS.forEach(i=>ii.append(el('option',{value:i.id,text:i.name})));ii.value=t.initiative;
+ const oi=el('input',{type:'text',list:'owners','aria-label':'Owner'});oi.value=t.owner;
+ const di=el('input',{type:'date','aria-label':'Due date'});di.value=t.due;
+ const ni=el('textarea',{class:'full',rows:'2','aria-label':'Notes'});ni.value=t.notes;
+ const cancel=el('button',{type:'button',text:'Cancel'});cancel.onclick=()=>{editing=null;render()};
+ f.append(ti,ii,oi,di,ni,el('div',{class:'row full'},cancel,el('button',{class:'primary',type:'submit',text:'Save'})));
+ f.onsubmit=async e=>{e.preventDefault();
+  const patch={title:ti.value.trim(),initiative:ii.value,owner:oi.value.trim()||'Unassigned',due:di.value,notes:ni.value.trim()};
+  if(!patch.title){say('Give the task a name first.');return}
+  if(await write({action:'update',id:t.id,task:toSheet(patch)})){editing=null;render();say('Saved.')}};
+ return f;
+}
+
+function confirmDelete(t,li){
+ const yes=el('button',{type:'button',text:'Yes'}),no=el('button',{type:'button',text:'No'});
+ yes.onclick=async()=>{if(await write({action:'delete',id:t.id}))say('Deleted.')};
+ no.onclick=()=>render();
+ li.querySelector('.acts').replaceWith(el('div',{class:'acts'},el('span',{text:'Delete?',style:'font-size:12px;align-self:center'}),yes,no));
+}
+
+async function setStatus(t,next){
+ const prev=t.status;
+ t.status=next;render();
+ if(await write({action:'update',id:t.id,task:{status:SLABEL[next]}}))say(t.title+': '+SLABEL[next]);else{t.status=prev;render()}
+}
+
+$('addForm').onsubmit=async e=>{e.preventDefault();
+ const t={title:$('aTitle').value.trim(),initiative:$('aInit').value,owner:$('aOwner').value.trim()||'Unassigned',due:$('aDue').value,notes:$('aNotes').value.trim(),status:'todo'};
+ if(!t.title)return;
+ if(await write({action:'add',task:toSheet(t)})){e.target.reset();say('Added.')}};
+
+// Board fields to the Sheet's column values (initiative and status use their display names).
+function toSheet(p){const o={...p};
+ if('initiative' in o)o.initiative=(INITS.find(i=>i.id===o.initiative)||{}).name||o.initiative;
+ if('status' in o)o.status=SLABEL[o.status]||o.status;
+ return o}
+
+async function post(body){
+ const r=await fetch(API,{method:'POST',body:JSON.stringify({...body,passcode:pass})});
+ if(!r.ok)throw new Error(r.status);return r.json()}
+
+async function write(body){
+ $('msg').textContent='Saving…';
+ try{const d=await post(body);
+  if(d.error==='passcode'){lock();say('That passcode no longer works. Unlock again.');return false}
+  if(d.tasks){tasks=d.tasks.map(norm);refreshOwners();render()}
+  if(d.error==='missing'){say('That task was changed in the Sheet. The board has been refreshed.');return false}
+  return true}
+ catch(e){say('Could not save. Check your connection and try again.');return false}}
+
+function lock(){pass=null;pref('cmwim.pass','');editing=null;showLock();render()}
+function showLock(){
+ const box=$('lockBox');$('addBox').hidden=!pass;
+ if(!API){box.replaceChildren(SHEET?el('a',{href:SHEET.split('/gviz/')[0]+'/edit',text:'Edit tasks in the Sheet'}):'');return}
+ if(pass){const b=el('button',{type:'button',text:'Lock'});b.onclick=lock;box.replaceChildren(el('span',{class:'status-line',text:'Editing on '}),b);return}
+ const f=el('form',{class:'unlock'}),pi=el('input',{type:'password',placeholder:'Exec passcode','aria-label':'Exec passcode',size:'14'});
+ f.append(pi,el('button',{class:'primary',type:'submit',text:'Unlock editing'}));
+ f.onsubmit=async e=>{e.preventDefault();pass=pi.value;
+  try{const d=await post({action:'check'});if(d.ok){pref('cmwim.pass',pass);showLock();render();say('Editing unlocked.');return}}catch(err){}
+  pass=null;say('Wrong passcode.')};
+ box.replaceChildren(f);
+}
+
+function parseCSV(s){const rows=[];let row=[],f='',q=false;
+ for(let i=0;i<s.length;i++){const c=s[i];
+  if(q){if(c==='"'){if(s[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+  else if(c==='"')q=true;else if(c===','){row.push(f);f=''}
+  else if(c==='\n'||c==='\r'){if(c==='\r'&&s[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}
+  else f+=c}
+ if(f||row.length){row.push(f);rows.push(row)}return rows}
+
+// Dates typed into new rows may not keep the yyyy-mm-dd format, so accept anything Date can read.
+function toISO(v){v=(v||'').trim();if(!v)return '';if(/^\d{4}-\d{2}-\d{2}/.test(v))return v.slice(0,10);
+ const d=new Date(v);if(isNaN(d))return '';return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+
+// A Sheet row (display names) to a board task (ids).
+const initId=Object.fromEntries(INITS.map(i=>[i.name.toLowerCase(),i.id]));
+const statusId=Object.fromEntries(Object.entries(SLABEL).map(([k,v])=>[v.toLowerCase(),k]));
+const norm=r=>({id:r.id||'',
+ title:(r.title||'').trim(),
+ initiative:initId[(r.initiative||'').trim().toLowerCase()]||'_other',
+ sheetInit:(r.initiative||'').trim(),
+ owner:(r.owner||'').trim()||'Unassigned',
+ due:toISO(r.due),
+ status:statusId[(r.status||'').trim().toLowerCase()]||'todo',
+ notes:(r.notes||'').trim()});
+
+function fromCSV(csv){
+ const [head,...rows]=parseCSV(csv),col=n=>head.findIndex(h=>h.trim().toLowerCase()===n);
+ const c={initiative:col('initiative'),title:col('task'),owner:col('owner'),due:col('due'),status:col('status'),notes:col('notes')};
+ return rows.map(r=>norm(Object.fromEntries(Object.entries(c).map(([k,i])=>[k,r[i]])))).filter(t=>t.title)}
+
+pass=API&&pref('cmwim.pass')||null;
+showLock();
+(API?fetch(API).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>d.tasks.map(norm).filter(t=>t.title))
+    :SHEET?fetch(SHEET,{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.text()}).then(fromCSV)
+    :fetch('tasks.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>d.map(norm).filter(t=>t.title)))
+ .then(d=>{tasks=d;refreshOwners();render()})
+ .catch(()=>{loadFailed=true;render()});
+</script>
+</body>
+</html>

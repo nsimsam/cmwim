@@ -1,0 +1,95 @@
+// Lets the board at noorsimsam.com/cmwim/ read and edit the Tasks tab of this sheet.
+// Setup: Project Settings → Script properties → add PASSCODE. Then Deploy → New deployment →
+// Web app, Execute as: Me, Who has access: Anyone.
+
+const TAB = 'Tasks';
+const FIELDS = { initiative: 'Initiative', title: 'Task', owner: 'Owner', due: 'Due', status: 'Status', notes: 'Notes' };
+
+function doGet() {
+  return json_({ tasks: read_() });
+}
+
+function doPost(e) {
+  const req = JSON.parse(e.postData.contents);
+  if (req.passcode !== PropertiesService.getScriptProperties().getProperty('PASSCODE')) {
+    return json_({ error: 'passcode' });
+  }
+  if (req.action === 'check') return json_({ ok: true });
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = sheet_(), c = cols_(sh), task = req.task || {};
+    if (req.action === 'add') {
+      const row = new Array(sh.getLastColumn()).fill('');
+      for (const [k, h] of Object.entries(FIELDS)) if (k in task) row[c[h]] = task[k];
+      row[c.ID] = newId_();
+      sh.appendRow(row);
+    } else {
+      const n = sh.getLastRow() - 1;
+      const ids = n > 0 ? sh.getRange(2, c.ID + 1, n, 1).getValues().map(r => String(r[0])) : [];
+      const i = ids.indexOf(String(req.id));
+      if (i < 0) return json_({ error: 'missing', tasks: read_() });
+      if (req.action === 'delete') {
+        sh.deleteRow(i + 2);
+      } else if (req.action === 'update') {
+        for (const [k, h] of Object.entries(FIELDS)) if (k in task) sh.getRange(i + 2, c[h] + 1).setValue(task[k]);
+      }
+    }
+    SpreadsheetApp.flush();
+    return json_({ ok: true, tasks: read_() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sheet_() {
+  return SpreadsheetApp.getActive().getSheetByName(TAB);
+}
+
+// Maps header names to 0-based column indexes, adding an ID column on first run.
+function cols_(sh) {
+  let head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  if (head.indexOf('ID') < 0) {
+    sh.getRange(1, head.length + 1).setValue('ID');
+    head.push('ID');
+  }
+  const c = {};
+  head.forEach((h, i) => (c[h] = i));
+  return c;
+}
+
+function newId_() {
+  return Utilities.getUuid().slice(0, 8);
+}
+
+// Returns every task row, giving rows without an ID one (rows added by hand in the sheet).
+function read_() {
+  const sh = sheet_(), c = cols_(sh), n = sh.getLastRow() - 1;
+  if (n < 1) return [];
+  const tz = Session.getScriptTimeZone();
+  const vals = sh.getRange(2, 1, n, sh.getLastColumn()).getValues();
+  const out = [];
+  vals.forEach((r, i) => {
+    if (!String(r[c.Task]).trim()) return;
+    if (!r[c.ID]) {
+      r[c.ID] = newId_();
+      sh.getRange(i + 2, c.ID + 1).setValue(r[c.ID]);
+    }
+    const due = r[c.Due] instanceof Date ? Utilities.formatDate(r[c.Due], tz, 'yyyy-MM-dd') : String(r[c.Due] || '');
+    out.push({
+      id: String(r[c.ID]),
+      initiative: String(r[c.Initiative]),
+      title: String(r[c.Task]),
+      owner: String(r[c.Owner]),
+      due: due,
+      status: String(r[c.Status]),
+      notes: String(r[c.Notes]),
+    });
+  });
+  return out;
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}

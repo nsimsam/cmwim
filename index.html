@@ -194,7 +194,7 @@ const OWNERS=['Noor Simsam','Lana','Noor Suddle','Darah','Mahum','Darah & Mahum'
 // The Tasks tab of the master Google Sheet, read as CSV. Read-only fallback until API is set.
 const SHEET='https://docs.google.com/spreadsheets/d/1M7I2oyw726dc9xS642O1nkgt7-_U7omqBkMSNJGvm5I/gviz/tq?tqx=out:csv&sheet=Tasks';
 // Web app URL of apps-script/Code.gs, deployed from the Sheet. Reads and writes go through it.
-const API='';
+const API='https://script.google.com/macros/s/AKfycbw2u3ISnFtLvcuM2CXDfyw7BV86PzIufXu5bV3EbcTdoMAWorrFNdZHceHEzWK-USdA/exec';
 const $=id=>document.getElementById(id);
 let tasks=[], loadFailed=false, editing=null, pass=null, view='list';
 const pref=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}};

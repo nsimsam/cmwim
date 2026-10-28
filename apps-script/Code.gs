@@ -36,10 +36,31 @@ function doPost(e) {
         for (const [k, h] of Object.entries(FIELDS)) if (k in task) sh.getRange(i + 2, c[h] + 1).setValue(task[k]);
       }
     }
+    if (task.initiative) addToList_(String(task.initiative).trim());
     SpreadsheetApp.flush();
     return json_({ ok: true, tasks: read_() });
   } finally {
     lock.releaseLock();
+  }
+}
+
+// Adds an initiative typed on the board to the Lists tab, so the Sheet's Initiative dropdown offers it too.
+function addToList_(name) {
+  const ls = SpreadsheetApp.getActive().getSheetByName('Lists');
+  if (!ls || !name) return;
+  const head = ls.getRange(1, 1, 1, ls.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const col = head.indexOf('Initiative') + 1;
+  if (!col) return;
+  const vals = ls.getRange(2, col, Math.max(ls.getLastRow() - 1, 1), 1).getValues().map(r => String(r[0]).trim()).filter(String);
+  if (vals.indexOf(name) >= 0) return;
+  ls.getRange(vals.length + 2, col).setValue(name);
+  // Point the dropdown at the whole Lists column so later additions show up as well.
+  try {
+    const sh = sheet_(), c = cols_(sh);
+    const rule = SpreadsheetApp.newDataValidation().requireValueInRange(ls.getRange(2, col, ls.getMaxRows() - 1, 1), true).setAllowInvalid(true).build();
+    sh.getRange(2, c.Initiative + 1, sh.getMaxRows() - 1, 1).setDataValidation(rule);
+  } catch (e) {
+    // A Sheets table manages its own dropdowns; the name is still on the Lists tab.
   }
 }
 

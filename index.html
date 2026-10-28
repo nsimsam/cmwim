@@ -191,8 +191,8 @@ const AVOID=[
 const SLABEL={todo:'To do',doing:'In progress',done:'Done'};
 const STATUS=Object.keys(SLABEL);
 const OWNERS=['Noor Simsam','Lana','Noor Suddle','Darah','Mahum','Darah & Mahum','Noor Simsam & Lana','Outreach','Admin','Whole team','Unassigned'];
-// The Tasks tab of the master Google Sheet, read as CSV. Until it is set, the board shows tasks.json.
-const SHEET='';
+// The Tasks tab of the master Google Sheet, read as CSV. Read-only fallback until API is set.
+const SHEET='https://docs.google.com/spreadsheets/d/1M7I2oyw726dc9xS642O1nkgt7-_U7omqBkMSNJGvm5I/gviz/tq?tqx=out:csv&sheet=Tasks';
 // Web app URL of apps-script/Code.gs, deployed from the Sheet. Reads and writes go through it.
 const API='';
 const $=id=>document.getElementById(id);
@@ -390,7 +390,7 @@ async function write(body){
 function lock(){pass=null;pref('cmwim.pass','');editing=null;showLock();render()}
 function showLock(){
  const box=$('lockBox');$('addBox').hidden=!pass;
- if(!API){box.replaceChildren(SHEET?el('a',{href:SHEET.split('/gviz/')[0]+'/edit',text:'Edit tasks in the Sheet'}):'');return}
+ if(!API){box.replaceChildren(el('a',{href:SHEET.split('/gviz/')[0]+'/edit',text:'Edit tasks in the Sheet'}));return}
  if(pass){const b=el('button',{type:'button',text:'Lock'});b.onclick=lock;box.replaceChildren(el('span',{class:'status-line',text:'Editing on '}),b);return}
  const f=el('form',{class:'unlock'}),pi=el('input',{type:'password',placeholder:'Exec passcode','aria-label':'Exec passcode',size:'14'});
  f.append(pi,el('button',{class:'primary',type:'submit',text:'Unlock editing'}));
@@ -432,8 +432,7 @@ function fromCSV(csv){
 pass=API&&pref('cmwim.pass')||null;
 showLock();
 (API?fetch(API).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>d.tasks.map(norm).filter(t=>t.title))
-    :SHEET?fetch(SHEET,{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.text()}).then(fromCSV)
-    :fetch('tasks.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>d.map(norm).filter(t=>t.title)))
+    :fetch(SHEET,{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.text()}).then(fromCSV))
  .then(d=>{tasks=d;refreshOwners();render()})
  .catch(()=>{loadFailed=true;render()});
 </script>

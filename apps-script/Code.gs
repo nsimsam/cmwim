@@ -6,7 +6,7 @@ const TAB = 'Tasks';
 const FIELDS = { initiative: 'Initiative', title: 'Task', owner: 'Owner', due: 'Due', status: 'Status', notes: 'Notes' };
 
 function doGet() {
-  return json_({ tasks: read_() });
+  return json_({ tasks: read_(), inits: inits_() });
 }
 
 function doPost(e) {
@@ -19,6 +19,11 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    if (req.action === 'initUpdate') {
+      setInit_(String(req.name || '').trim(), String(req.description || ''));
+      SpreadsheetApp.flush();
+      return json_({ ok: true, tasks: read_(), inits: inits_() });
+    }
     const sh = sheet_(), c = cols_(sh), task = req.task || {};
     if (req.action === 'add') {
       const row = new Array(sh.getLastColumn()).fill('');
@@ -29,7 +34,7 @@ function doPost(e) {
       const n = sh.getLastRow() - 1;
       const ids = n > 0 ? sh.getRange(2, c.ID + 1, n, 1).getValues().map(r => String(r[0])) : [];
       const i = ids.indexOf(String(req.id));
-      if (i < 0) return json_({ error: 'missing', tasks: read_() });
+      if (i < 0) return json_({ error: 'missing', tasks: read_(), inits: inits_() });
       if (req.action === 'delete') {
         sh.deleteRow(i + 2);
       } else if (req.action === 'update') {
@@ -38,7 +43,7 @@ function doPost(e) {
     }
     if (task.initiative) addToList_(String(task.initiative).trim());
     SpreadsheetApp.flush();
-    return json_({ ok: true, tasks: read_() });
+    return json_({ ok: true, tasks: read_(), inits: inits_() });
   } finally {
     lock.releaseLock();
   }
@@ -62,6 +67,34 @@ function addToList_(name) {
   } catch (e) {
     // A Sheets table manages its own dropdowns; the name is still on the Lists tab.
   }
+}
+
+const INIT_TAB = 'Initiatives';
+
+// Initiative descriptions edited on the board (or typed on the Initiatives tab).
+// A planned initiative without a row keeps the board's built-in text.
+function inits_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(INIT_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues()
+    .filter(r => String(r[0]).trim())
+    .map(r => ({ name: String(r[0]).trim(), description: String(r[1]) }));
+}
+
+function setInit_(name, description) {
+  if (!name) return;
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(INIT_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(INIT_TAB);
+    sh.getRange(1, 1, 1, 2).setValues([['Initiative', 'Description']]).setFontWeight('bold');
+    sh.getRange('A:B').setNumberFormat('@');
+  }
+  const n = sh.getLastRow() - 1;
+  const names = n > 0 ? sh.getRange(2, 1, n, 1).getValues().map(r => String(r[0]).trim().toLowerCase()) : [];
+  const i = names.indexOf(name.toLowerCase());
+  if (i >= 0) sh.getRange(i + 2, 2).setValue(description);
+  else sh.appendRow([name, description]);
 }
 
 function sheet_() {

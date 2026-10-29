@@ -116,6 +116,9 @@ select.pill{border:0;cursor:pointer;padding-right:6px;text-align:left}
 @media (max-width:720px){.addgrid,.edit{grid-template-columns:1fr 1fr}}
 li.task.can{grid-template-columns:auto 1fr auto}
 .acts{display:flex;gap:4px}
+.descedit{padding:1px 7px;font-size:12px;color:var(--muted)}
+.descform{display:flex;gap:6px;flex:1 1 320px;min-width:0}
+.descform input{flex:1 1 auto;min-width:0}
 .initpick{display:flex;gap:6px;min-width:0}
 .initpick select,.initpick input{flex:1 1 0;min-width:0}
 .acts button{padding:3px 8px;font-size:12px;color:var(--muted)}
@@ -322,7 +325,7 @@ function render(){
   if((fo||fs)&&!list.length)continue;
   list.sort((a,b)=>(a.status==='done')-(b.status==='done')||(a.due||'9999').localeCompare(b.due||'9999')||(a.title||'').localeCompare(b.title||''));
   const sec=el('section',{class:'init','aria-label':g.name});
-  sec.append(el('div',{class:'ihead'},el('span',{class:'tagS '+g.s,text:g.s}),el('h2',{text:g.name}),g.idea?el('span',{class:'idea',text:'Idea'}):null,el('span',{class:'when',text:g.when}),el('span',{class:'prog',text:total?nd+'/'+total+' done':''})));
+  sec.append(el('div',{class:'ihead'},el('span',{class:'tagS '+g.s,text:g.s}),el('h2',{text:g.name}),g.idea?el('span',{class:'idea',text:'Idea'}):null,initWhen(g),el('span',{class:'prog',text:total?nd+'/'+total+' done':''})));
   if(g.ideas){const d=el('details',{class:'ideas'},el('summary',{text:g.ideasLabel}));const ol=el('ol');g.ideas.forEach(x=>ol.append(el('li',{text:x})));d.append(ol);sec.append(d)}
   const ul=el('ul',{class:'tasks'});
   if(!list.length)ul.append(el('li',{class:'empty',text:'No tasks yet.'}));
@@ -330,6 +333,24 @@ function render(){
   sec.append(ul);board.append(sec);
  }
 }
+
+// Initiative descriptions from the Sheet's Initiatives tab override the built-in text. null until the
+// script sends them (an older deployment doesn't), and then descriptions can't be edited.
+let initDesc=null, editingInit=null;
+function setInits(list){initDesc={};for(const i of list)initDesc[String(i.name).trim().toLowerCase()]=String(i.description)}
+function initWhen(g){
+ const key=g.name.toLowerCase(),text=initDesc&&key in initDesc?initDesc[key]:g.when||'';
+ if(!(pass&&initDesc)||g.id==='_other')return el('span',{class:'when',text});
+ if(editingInit!==g.id){const b=el('button',{type:'button',class:'descedit',text:text?'Edit description':'Add description'});
+  b.onclick=()=>{editingInit=g.id;render()};return el('span',{class:'when'},text?text+' ':'',b)}
+ const f=el('form',{class:'descform'}),inp=el('input',{type:'text','aria-label':g.name+' description'});inp.value=text;
+ const cancel=el('button',{type:'button',text:'Cancel'});cancel.onclick=()=>{editingInit=null;render()};
+ inp.onkeydown=e=>{if(e.key==='Escape'){editingInit=null;render()}};
+ f.append(inp,cancel,el('button',{class:'primary',type:'submit',text:'Save'}));
+ f.onsubmit=async e=>{e.preventDefault();
+  if(await write({action:'initUpdate',name:g.name,description:inp.value.trim()})){editingInit=null;render();say('Saved.')}};
+ requestAnimationFrame(()=>inp.focus());
+ return f}
 
 function taskRow(t){
  const st=SLABEL[t.status]?t.status:'todo';
@@ -406,6 +427,7 @@ async function write(body){
  $('msg').textContent='Saving…';
  try{const d=await post(body);
   if(d.error==='passcode'){lock();say('That passcode no longer works. Unlock again.');return false}
+  if(d.inits)setInits(d.inits);
   if(d.tasks){tasks=d.tasks.map(norm);refreshOwners();fillInits();render()}
   if(d.error==='missing'){say('That task was changed in the Sheet. The board has been refreshed.');return false}
   return true}
@@ -456,7 +478,7 @@ function fromCSV(csv){
 
 pass=API&&pref('cmwim.pass')||null;
 showLock();
-(API?fetch(API).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>d.tasks.map(norm).filter(t=>t.title))
+(API?fetch(API).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>{if(d.inits)setInits(d.inits);return d.tasks.map(norm).filter(t=>t.title)})
     :fetch(SHEET,{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.text()}).then(fromCSV))
  .then(d=>{tasks=d;refreshOwners();fillInits();render()})
  .catch(()=>{loadFailed=true;render()});

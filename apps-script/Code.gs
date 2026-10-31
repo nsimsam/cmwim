@@ -4,9 +4,12 @@
 
 const TAB = 'Tasks';
 const FIELDS = { initiative: 'Initiative', title: 'Task', owner: 'Owner', due: 'Due', status: 'Status', notes: 'Notes' };
+// Initiative descriptions edited on the board: one row per initiative, ideas one per line.
+const INIT_TAB = 'Initiatives';
+const INIT_HEAD = ['Initiative', 'Stream', 'When', 'Ideas'];
 
 function doGet() {
-  return json_({ tasks: read_(), inits: inits_() });
+  return json_({ tasks: read_(), initiatives: readInits_() });
 }
 
 function doPost(e) {
@@ -19,10 +22,10 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    if (req.action === 'initUpdate') {
-      setInit_(String(req.name || '').trim(), String(req.description || ''));
+    if (req.action === 'initiative') {
+      saveInit_(req.initiative || {});
       SpreadsheetApp.flush();
-      return json_({ ok: true, tasks: read_(), inits: inits_() });
+      return json_({ ok: true, tasks: read_(), initiatives: readInits_() });
     }
     const sh = sheet_(), c = cols_(sh), task = req.task || {};
     if (req.action === 'add') {
@@ -34,7 +37,7 @@ function doPost(e) {
       const n = sh.getLastRow() - 1;
       const ids = n > 0 ? sh.getRange(2, c.ID + 1, n, 1).getValues().map(r => String(r[0])) : [];
       const i = ids.indexOf(String(req.id));
-      if (i < 0) return json_({ error: 'missing', tasks: read_(), inits: inits_() });
+      if (i < 0) return json_({ error: 'missing', tasks: read_() });
       if (req.action === 'delete') {
         sh.deleteRow(i + 2);
       } else if (req.action === 'update') {
@@ -43,7 +46,7 @@ function doPost(e) {
     }
     if (task.initiative) addToList_(String(task.initiative).trim());
     SpreadsheetApp.flush();
-    return json_({ ok: true, tasks: read_(), inits: inits_() });
+    return json_({ ok: true, tasks: read_(), initiatives: readInits_() });
   } finally {
     lock.releaseLock();
   }
@@ -69,32 +72,32 @@ function addToList_(name) {
   }
 }
 
-const INIT_TAB = 'Initiatives';
-
-// Initiative descriptions edited on the board (or typed on the Initiatives tab).
-// A planned initiative without a row keeps the board's built-in text.
-function inits_() {
-  const sh = SpreadsheetApp.getActive().getSheetByName(INIT_TAB);
-  if (!sh || sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues()
+function readInits_() {
+  const s = SpreadsheetApp.getActive().getSheetByName(INIT_TAB);
+  if (!s || s.getLastRow() < 2) return [];
+  return s.getRange(2, 1, s.getLastRow() - 1, INIT_HEAD.length).getValues()
     .filter(r => String(r[0]).trim())
-    .map(r => ({ name: String(r[0]).trim(), description: String(r[1]) }));
+    .map(r => ({ name: String(r[0]).trim(), stream: String(r[1]).trim(), when: String(r[2]), ideas: String(r[3]) }));
 }
 
-function setInit_(name, description) {
+// Adds or replaces an initiative's row on the Initiatives tab, creating the tab on first use.
+function saveInit_(it) {
+  const name = String(it.name || '').trim();
   if (!name) return;
   const ss = SpreadsheetApp.getActive();
-  let sh = ss.getSheetByName(INIT_TAB);
-  if (!sh) {
-    sh = ss.insertSheet(INIT_TAB);
-    sh.getRange(1, 1, 1, 2).setValues([['Initiative', 'Description']]).setFontWeight('bold');
-    sh.getRange('A:B').setNumberFormat('@');
+  let s = ss.getSheetByName(INIT_TAB);
+  if (!s) {
+    s = ss.insertSheet(INIT_TAB);
+    s.getRange(1, 1, 1, INIT_HEAD.length).setValues([INIT_HEAD]).setFontWeight('bold');
+    s.setFrozenRows(1);
   }
-  const n = sh.getLastRow() - 1;
-  const names = n > 0 ? sh.getRange(2, 1, n, 1).getValues().map(r => String(r[0]).trim().toLowerCase()) : [];
-  const i = names.indexOf(name.toLowerCase());
-  if (i >= 0) sh.getRange(i + 2, 2).setValue(description);
-  else sh.appendRow([name, description]);
+  const n = Math.max(s.getLastRow() - 1, 0);
+  const names = n ? s.getRange(2, 1, n, 1).getValues().map(r => String(r[0]).trim().toLowerCase()) : [];
+  let row = names.indexOf(name.toLowerCase()) + 2;
+  if (row < 2) row = n + 2;
+  // Plain text, so a line starting with = or + is not read as a formula.
+  s.getRange(row, 1, 1, INIT_HEAD.length).setNumberFormat('@')
+    .setValues([[name, String(it.stream || ''), String(it.when || ''), String(it.ideas || '')]]);
 }
 
 function sheet_() {

@@ -54,6 +54,10 @@ section.init{background:var(--surface);border:1px solid var(--line);border-radiu
 .prog{margin-left:auto;font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
 .ideas{border-bottom:1px solid var(--line);padding:8px 14px;background:var(--bg)}
 .ideas summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--teal)}
+.iedit{padding:3px 8px;font-size:12px;color:var(--muted)}
+.iform{padding:10px 14px;border-bottom:1px solid var(--line);background:var(--bg)}
+.edit.iform>:first-child{grid-column:span 3}
+@media (max-width:720px){.edit.iform>:first-child{grid-column:1/-1}}
 .ideas ol{margin:8px 0 4px;padding-left:20px;max-width:75ch} .ideas li{margin:3px 0}
 ul.tasks{list-style:none;margin:0;padding:0}
 li.task{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line)}
@@ -112,15 +116,20 @@ select.pill{border:0;cursor:pointer;padding-right:6px;text-align:left}
 .addgrid{margin-top:10px}
 .addgrid .full,.edit .full{grid-column:1/-1}
 .edit{grid-column:1/-1;padding-top:6px}
+.addgrid>:first-child,.edit>:first-child{grid-column:span 2}
+.initpick{display:flex;flex-direction:column;gap:6px;min-width:0}
+.initpick select,.initpick input{width:100%}
+.picker{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:0;margin:0;padding:0;min-width:0}
+.picker legend{float:left;margin-right:4px;padding:0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.pick{cursor:pointer}
+.pick input{position:absolute;opacity:0;width:1px;height:1px}
+.pick span{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px;background:var(--bg)}
+.pick input:checked+span{background:var(--indigo-soft);border-color:var(--indigo);color:var(--indigo);font-weight:600}
+.pick input:focus-visible+span{outline:2px solid var(--indigo);outline-offset:2px}
 .edit .row{display:flex;gap:8px;justify-content:flex-end}
 @media (max-width:720px){.addgrid,.edit{grid-template-columns:1fr 1fr}}
 li.task.can{grid-template-columns:auto 1fr auto}
 .acts{display:flex;gap:4px}
-.descedit{padding:1px 7px;font-size:12px;color:var(--muted)}
-.descform{display:flex;gap:6px;flex:1 1 320px;min-width:0}
-.descform input{flex:1 1 auto;min-width:0}
-.initpick{display:flex;gap:6px;min-width:0}
-.initpick select,.initpick input{flex:1 1 0;min-width:0}
 .acts button{padding:3px 8px;font-size:12px;color:var(--muted)}
 </style>
 </head>
@@ -149,14 +158,12 @@ li.task.can{grid-template-columns:auto 1fr auto}
     <summary>Add a task</summary>
     <form id="addForm" class="addgrid">
       <input type="text" id="aTitle" placeholder="What needs doing" required aria-label="Task">
-      <span id="aInitBox"></span>
-      <input type="text" id="aOwner" list="owners" placeholder="Owner" aria-label="Owner">
+      <select id="aInit" aria-label="Initiative"></select>
       <input type="date" id="aDue" aria-label="Due date">
       <textarea id="aNotes" class="full" rows="2" placeholder="Notes (optional)" aria-label="Notes"></textarea>
       <div class="full"><button class="primary" type="submit">Add task</button></div>
     </form>
   </details>
-  <datalist id="owners"></datalist>
 
   <div id="board"><p class="empty">Loading tasks…</p></div>
 </div>
@@ -195,13 +202,13 @@ const AVOID=[
 ];
 const SLABEL={todo:'To do',doing:'In progress',done:'Done'};
 const STATUS=Object.keys(SLABEL);
-const OWNERS=['Noor Simsam','Lana','Noor Suddle','Darah','Mahum','Darah & Mahum','Noor Simsam & Lana','Outreach','Admin','Whole team','Unassigned'];
+const TEAM=['Noor Simsam','Lana','Noor Suddle','Darah','Mahum','Outreach','Admin','Whole team'];
 // The Tasks tab of the master Google Sheet, read as CSV. Read-only fallback until API is set.
 const SHEET='https://docs.google.com/spreadsheets/d/1M7I2oyw726dc9xS642O1nkgt7-_U7omqBkMSNJGvm5I/gviz/tq?tqx=out:csv&sheet=Tasks';
 // Web app URL of apps-script/Code.gs, deployed from the Sheet. Reads and writes go through it.
 const API='https://script.google.com/macros/s/AKfycbw2u3ISnFtLvcuM2CXDfyw7BV86PzIufXu5bV3EbcTdoMAWorrFNdZHceHEzWK-USdA/exec';
 const $=id=>document.getElementById(id);
-let tasks=[], loadFailed=false, editing=null, pass=null, view='list';
+let tasks=[], loadFailed=false, editing=null, editingInit=null, pass=null, view='list';
 const pref=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}};
 
 function todayISO(){const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)}
@@ -212,29 +219,58 @@ const owners=t=>(t.owner||'Unassigned').split(/\s*&\s*/).map(s=>s.trim());
 
 function say(t){$('msg').textContent=t;clearTimeout(say.t);say.t=setTimeout(()=>$('msg').textContent='',4000)}
 
-// Initiatives in INITS have dates and tags; any other name typed into the Sheet or the board gets its own section, id 'x:<name>'.
-const groups=()=>{const seen=new Set(INITS.map(i=>i.id)),extra=[];
- for(const t of tasks)if(t.initiative.startsWith('x:')&&!seen.has(t.initiative)){seen.add(t.initiative);extra.push({id:t.initiative,name:t.initiative.slice(2),when:'',s:'ALL'})}
- return [...INITS,...extra.sort((a,b)=>a.name.localeCompare(b.name))]};
-const initName=id=>id.startsWith('x:')?id.slice(2):(INITS.find(i=>i.id===id)||{}).name||id;
-// An initiative menu with a "New initiative" choice that opens a name box. get() returns an id, or '' if the new name is blank.
-function initPicker(cur){
- const sel=el('select',{'aria-label':'Initiative'}),name=el('input',{type:'text',placeholder:'New initiative name','aria-label':'New initiative name',hidden:''});
+// Built-in initiatives first, then any other initiative name used in the Sheet (id "x:<name>"),
+// then "Other" for tasks with no initiative.
+// Each initiative's stream, date line and ideas can be overridden from the Sheet's Initiatives tab;
+// an initiative listed there shows even before it has tasks.
+function groups(){
+ const fromMeta=Object.values(meta).filter(m=>!initId[m.name.toLowerCase()]).map(m=>'x:'+m.name);
+ const custom=[...new Set([...tasks.filter(t=>t.initiative.startsWith('x:')).map(t=>t.initiative),...fromMeta])].sort()
+  .map(id=>({id,name:id.slice(2),when:'',s:'ALL'}));
+ const other=tasks.some(t=>t.initiative==='_other')?[{id:'_other',name:'Other',when:'',s:'ALL'}]:[];
+ return [...INITS,...custom].map(withMeta).concat(other);
+}
+// metaOn stays false until the script sends initiatives (an older deployment doesn't), so there is no Edit button yet.
+let meta={},metaOn=false;
+function setMeta(list){if(!list)return;metaOn=true;meta={};list.forEach(m=>{if(m.name)meta[m.name.toLowerCase()]=m})}
+function withMeta(g){
+ const m=meta[g.name.toLowerCase()];if(!m)return g;
+ return {...g,s:STREAMS.includes(m.stream)?m.stream:g.s,when:m.when,ideas:m.ideas.split('\n').map(s=>s.trim()).filter(Boolean)};
+}
+const STREAMS=['NAT','WES','ALL'];
+const initName=id=>id.startsWith('x:')?id.slice(2):(INITS.find(i=>i.id===id)||{}).name||'';
+
+function refreshInits(){
+ const cur=pref('cmwim.fInit')||$('fInit').value,sel=$('fInit');
+ sel.replaceChildren(el('option',{value:'',text:'All'}));
  groups().forEach(g=>sel.append(el('option',{value:g.id,text:g.name})));
- sel.append(el('option',{value:'_new',text:'+ New initiative…'}));
- if(cur)sel.value=cur;
- sel.onchange=()=>{name.hidden=sel.value!=='_new';if(!name.hidden)name.focus()};
- const box=el('span',{class:'initpick'},sel,name);
- box.get=()=>{if(sel.value!=='_new')return sel.value;const n=name.value.trim();return n?initKey(n):''};
- box.typing=()=>sel.value==='_new';
- return box}
-let addInit=null;
-// The saved filter is kept in data-want until the menu has its options.
-function fillInits(){const f=$('fInit'),cur=f.value||f.dataset.want||'';delete f.dataset.want;
- f.replaceChildren(el('option',{value:'',text:'All'}));groups().forEach(g=>f.append(el('option',{value:g.id,text:g.name})));f.value=cur;if(f.value!==cur)f.value='';
- if(!addInit||!addInit.typing())addInit=initPicker(addInit&&addInit.get());$('aInitBox').replaceChildren(addInit)}
-for(const o of OWNERS)$('owners').append(el('option',{value:o}));
-$('fInit').dataset.want=pref('cmwim.fInit')||'';$('fStat').value=pref('cmwim.fStat')||'';
+ sel.value=groups().some(g=>g.id===cur)?cur:'';
+ if(addInit.querySelector('select').value!=='__new'){const q=initPicker(addInit.get());addInit.replaceWith(q);addInit=q}
+}
+
+// Initiative menu with a "+ New initiative…" choice that reveals a name box.
+function initPicker(value){
+ const wrap=el('span',{class:'initpick'}),sel=el('select',{'aria-label':'Initiative'}),inp=el('input',{type:'text',placeholder:'New initiative name','aria-label':'New initiative name',hidden:''});
+ groups().filter(g=>g.id!=='_other').forEach(g=>sel.append(el('option',{value:g.id,text:g.name})));
+ sel.append(el('option',{value:'__new',text:'+ New initiative…'}));
+ sel.value=groups().some(g=>g.id===value&&value!=='_other')?value:INITS[0].id;
+ sel.onchange=()=>{inp.hidden=sel.value!=='__new';if(!inp.hidden)inp.focus()};
+ wrap.append(sel,inp);
+ wrap.get=()=>{if(sel.value!=='__new')return sel.value;const n=inp.value.trim();return n?initId[n.toLowerCase()]||'x:'+n:''};
+ return wrap;
+}
+// Owner tick boxes for every team member; several ticked become "Darah & Mahum", none is "Unassigned".
+function ownerPicker(value){
+ const cur=(value||'').split(/\s*&\s*/).map(s=>s.trim()).filter(s=>s&&s!=='Unassigned');
+ const names=[...TEAM,...cur.filter(n=>!TEAM.includes(n))];
+ const box=el('fieldset',{class:'picker full'},el('legend',{text:'Owner'}));
+ for(const n of names){const cb=el('input',{type:'checkbox',value:n});cb.checked=cur.includes(n);box.append(el('label',{class:'pick'},cb,el('span',{text:n})))}
+ box.get=()=>[...box.querySelectorAll('input:checked')].map(c=>c.value).join(' & ')||'Unassigned';
+ return box;
+}
+let addOwners=ownerPicker('');$('aDue').after(addOwners);
+let addInit=initPicker('');$('aInit').replaceWith(addInit);
+$('fInit').value=pref('cmwim.fInit')||'';$('fStat').value=pref('cmwim.fStat')||'';
 const statusOK=(t,fs)=>!fs||(fs==='open'?t.status!=='done':t.status===fs);
 $('fInit').onchange=()=>{pref('cmwim.fInit',$('fInit').value);render()};
 $('fOwner').onchange=()=>{pref('cmwim.fOwner',$('fOwner').value);render()};
@@ -246,11 +282,10 @@ view=pref('cmwim.view')==='tl'?'tl':'list';$('vList').setAttribute('aria-pressed
 const PX_DAY=6, DAY=864e5;
 const dayNum=iso=>Math.round(new Date(iso+'T12:00')/DAY);
 function timeline(fi,fo,fs){
- const known=new Set(groups().map(i=>i.id));
  const rows=[];let undated=0;
- for(const g of [...groups(),{id:'_other',name:'Other',s:'ALL'}]){
+ for(const g of groups()){
   if(fi&&fi!==g.id)continue;
-  let list=tasks.filter(t=>g.id==='_other'?!known.has(t.initiative):t.initiative===g.id);
+  let list=tasks.filter(t=>t.initiative===g.id);
   if(fo)list=list.filter(t=>owners(t).includes(fo));
   list=list.filter(t=>statusOK(t,fs));
   undated+=list.filter(t=>!t.due).length;
@@ -299,7 +334,7 @@ function timeline(fi,fo,fs){
 }
 
 function refreshOwners(){const cur=pref('cmwim.fOwner')||'';const set=new Set();tasks.forEach(t=>owners(t).forEach(n=>set.add(n)));
- const sel=$('fOwner');sel.replaceChildren(el('option',{value:'',text:'Everyone'}));[...set].sort().forEach(n=>sel.append(el('option',{value:n,text:n})));sel.value=set.has(cur)?cur:''}
+ const sel=$('fOwner');sel.replaceChildren(el('option',{value:'',text:'Everyone'}));[...set].sort().forEach(n=>sel.append(el('option',{value:n,text:n})));sel.value=set.has(cur)?cur:'';refreshInits()}
 
 function render(){
  const fi=$('fInit').value,fo=$('fOwner').value,fs=$('fStat').value;
@@ -314,43 +349,27 @@ function render(){
  const board=$('board');board.replaceChildren();
  if(!tasks.length){board.append(el('p',{class:'empty',text:loadFailed?'Tasks could not load. Try reloading.':'No tasks yet.'}));return}
  if(view==='tl'){board.append(timeline(fi,fo,fs));return}
- const known=new Set(groups().map(i=>i.id));
- for(const g of [...groups(),{id:'_other',name:'Other',when:'',s:'ALL'}]){
+ for(const g of groups()){
   if(fi&&fi!==g.id)continue;
-  let list=tasks.filter(t=>g.id==='_other'?!known.has(t.initiative):t.initiative===g.id);
-  if(!list.length&&g.id==='_other')continue;
+  let list=tasks.filter(t=>t.initiative===g.id);
   const total=list.length,nd=list.filter(t=>t.status==='done').length;
   if(fo)list=list.filter(t=>owners(t).includes(fo));
   list=list.filter(t=>statusOK(t,fs));
   if((fo||fs)&&!list.length)continue;
   list.sort((a,b)=>(a.status==='done')-(b.status==='done')||(a.due||'9999').localeCompare(b.due||'9999')||(a.title||'').localeCompare(b.title||''));
   const sec=el('section',{class:'init','aria-label':g.name});
-  sec.append(el('div',{class:'ihead'},el('span',{class:'tagS '+g.s,text:g.s}),el('h2',{text:g.name}),g.idea?el('span',{class:'idea',text:'Idea'}):null,initWhen(g),el('span',{class:'prog',text:total?nd+'/'+total+' done':''})));
-  if(g.ideas){const d=el('details',{class:'ideas'},el('summary',{text:g.ideasLabel}));const ol=el('ol');g.ideas.forEach(x=>ol.append(el('li',{text:x})));d.append(ol);sec.append(d)}
+  const head=el('div',{class:'ihead'},el('span',{class:'tagS '+g.s,text:g.s}),el('h2',{text:g.name}),g.idea?el('span',{class:'idea',text:'Idea'}):null,el('span',{class:'when',text:g.when}),el('span',{class:'prog',text:total?nd+'/'+total+' done':''}));
+  if(pass&&metaOn&&g.id!=='_other'){const b=el('button',{type:'button',class:'iedit',text:'Edit',
+   'aria-label':'Edit '+g.name+' description'});b.onclick=()=>{editingInit=editingInit===g.id?null:g.id;render()};head.append(b)}
+  sec.append(head);
+  if(editingInit===g.id)sec.append(initForm(g));
+  else if(g.ideas&&g.ideas.length){const d=el('details',{class:'ideas'},el('summary',{text:g.ideasLabel||'Notes and ideas'}));const ol=el('ol');g.ideas.forEach(x=>ol.append(el('li',{text:x})));d.append(ol);sec.append(d)}
   const ul=el('ul',{class:'tasks'});
   if(!list.length)ul.append(el('li',{class:'empty',text:'No tasks yet.'}));
   for(const t of list)ul.append(taskRow(t));
   sec.append(ul);board.append(sec);
  }
 }
-
-// Initiative descriptions from the Sheet's Initiatives tab override the built-in text. null until the
-// script sends them (an older deployment doesn't), and then descriptions can't be edited.
-let initDesc=null, editingInit=null;
-function setInits(list){initDesc={};for(const i of list)initDesc[String(i.name).trim().toLowerCase()]=String(i.description)}
-function initWhen(g){
- const key=g.name.toLowerCase(),text=initDesc&&key in initDesc?initDesc[key]:g.when||'';
- if(!(pass&&initDesc)||g.id==='_other')return el('span',{class:'when',text});
- if(editingInit!==g.id){const b=el('button',{type:'button',class:'descedit',text:text?'Edit description':'Add description'});
-  b.onclick=()=>{editingInit=g.id;render()};return el('span',{class:'when'},text?text+' ':'',b)}
- const f=el('form',{class:'descform'}),inp=el('input',{type:'text','aria-label':g.name+' description'});inp.value=text;
- const cancel=el('button',{type:'button',text:'Cancel'});cancel.onclick=()=>{editingInit=null;render()};
- inp.onkeydown=e=>{if(e.key==='Escape'){editingInit=null;render()}};
- f.append(inp,cancel,el('button',{class:'primary',type:'submit',text:'Save'}));
- f.onsubmit=async e=>{e.preventDefault();
-  if(await write({action:'initUpdate',name:g.name,description:inp.value.trim()})){editingInit=null;render();say('Saved.')}};
- requestAnimationFrame(()=>inp.focus());
- return f}
 
 function taskRow(t){
  const st=SLABEL[t.status]?t.status:'todo';
@@ -381,13 +400,13 @@ function editForm(t){
  const f=el('form',{class:'edit'});
  const ti=el('input',{type:'text','aria-label':'Task'});ti.value=t.title;
  const ii=initPicker(t.initiative);
- const oi=el('input',{type:'text',list:'owners','aria-label':'Owner'});oi.value=t.owner;
+ const oi=ownerPicker(t.owner);
  const di=el('input',{type:'date','aria-label':'Due date'});di.value=t.due;
  const ni=el('textarea',{class:'full',rows:'2','aria-label':'Notes'});ni.value=t.notes;
  const cancel=el('button',{type:'button',text:'Cancel'});cancel.onclick=()=>{editing=null;render()};
- f.append(ti,ii,oi,di,ni,el('div',{class:'row full'},cancel,el('button',{class:'primary',type:'submit',text:'Save'})));
+ f.append(ti,ii,di,oi,ni,el('div',{class:'row full'},cancel,el('button',{class:'primary',type:'submit',text:'Save'})));
  f.onsubmit=async e=>{e.preventDefault();
-  const patch={title:ti.value.trim(),initiative:ii.get(),owner:oi.value.trim()||'Unassigned',due:di.value,notes:ni.value.trim()};
+  const patch={title:ti.value.trim(),initiative:ii.get(),owner:oi.get(),due:di.value,notes:ni.value.trim()};
   if(!patch.title){say('Give the task a name first.');return}
   if(!patch.initiative){say('Name the new initiative first.');return}
   if(await write({action:'update',id:t.id,task:toSheet(patch)})){editing=null;render();say('Saved.')}};
@@ -408,14 +427,16 @@ async function setStatus(t,next){
 }
 
 $('addForm').onsubmit=async e=>{e.preventDefault();
- const t={title:$('aTitle').value.trim(),initiative:addInit.get(),owner:$('aOwner').value.trim()||'Unassigned',due:$('aDue').value,notes:$('aNotes').value.trim(),status:'todo'};
+ const t={title:$('aTitle').value.trim(),initiative:addInit.get(),owner:addOwners.get(),due:$('aDue').value,notes:$('aNotes').value.trim(),status:'todo'};
  if(!t.title)return;
  if(!t.initiative){say('Name the new initiative first.');return}
- if(await write({action:'add',task:toSheet(t)})){e.target.reset();addInit=null;fillInits();say('Added.')}};
+ if(await write({action:'add',task:toSheet(t)})){e.target.reset();
+  const p=ownerPicker('');addOwners.replaceWith(p);addOwners=p;
+  const q=initPicker(t.initiative);addInit.replaceWith(q);addInit=q;say('Added.')}};
 
 // Board fields to the Sheet's column values (initiative and status use their display names).
 function toSheet(p){const o={...p};
- if('initiative' in o)o.initiative=initName(o.initiative);
+ if('initiative' in o)o.initiative=initName(o.initiative)||o.initiative;
  if('status' in o)o.status=SLABEL[o.status]||o.status;
  return o}
 
@@ -427,18 +448,37 @@ async function write(body){
  $('msg').textContent='Saving…';
  try{const d=await post(body);
   if(d.error==='passcode'){lock();say('That passcode no longer works. Unlock again.');return false}
-  if(d.inits)setInits(d.inits);
-  if(d.tasks){tasks=d.tasks.map(norm);refreshOwners();fillInits();render()}
+  if(d.initiatives)setMeta(d.initiatives);
+  if(d.tasks){tasks=d.tasks.map(norm);refreshOwners();render()}
   if(d.error==='missing'){say('That task was changed in the Sheet. The board has been refreshed.');return false}
   return true}
  catch(e){say('Could not save. Check your connection and try again.');return false}}
+
+// Edits an initiative's stream, date line and ideas (one per line), saved to the Initiatives tab.
+function initForm(g){
+ const f=el('form',{class:'edit iform'});
+ const si=el('select',{'aria-label':'Stream'});STREAMS.forEach(s=>si.append(el('option',{value:s,text:{NAT:'NAT · National',WES:'WES · Western (London + Windsor)',ALL:'ALL · Whole team'}[s]})));si.value=g.s;
+ const wi=el('input',{type:'text','aria-label':'Date line',placeholder:'When and where, e.g. Sat Nov 21 · 11 AM'});wi.value=g.when||'';
+ const ii=el('textarea',{class:'full',rows:'6','aria-label':'Notes and ideas',placeholder:'Notes and ideas, one per line'});ii.value=(g.ideas||[]).join('\n');
+ const cancel=el('button',{type:'button',text:'Cancel'});cancel.onclick=()=>{editingInit=null;render()};
+ f.append(wi,si,ii,el('div',{class:'row full'},cancel,el('button',{class:'primary',type:'submit',text:'Save'})));
+ f.onsubmit=async e=>{e.preventDefault();
+  $('msg').textContent='Saving…';
+  try{const d=await post({action:'initiative',initiative:{name:g.name,stream:si.value,when:wi.value.trim(),ideas:ii.value.split('\n').map(s=>s.trim()).filter(Boolean).join('\n')}});
+   if(d.error==='passcode'){lock();say('That passcode no longer works. Unlock again.');return}
+   if(!d.initiatives){say('Update the Apps Script to save descriptions (see the README).');return}
+   setMeta(d.initiatives);if(d.tasks){tasks=d.tasks.map(norm);refreshOwners()}
+   editingInit=null;render();say('Saved.')}
+  catch(err){say('Could not save. Check your connection and try again.')}};
+ return f;
+}
 
 function lock(){pass=null;pref('cmwim.pass','');editing=null;showLock();render()}
 function showLock(){
  const box=$('lockBox');$('addBox').hidden=!pass;
  if(!API){box.replaceChildren(el('a',{href:SHEET.split('/gviz/')[0]+'/edit',text:'Edit tasks in the Sheet'}));return}
  if(pass){const b=el('button',{type:'button',text:'Lock'});b.onclick=lock;box.replaceChildren(el('span',{class:'status-line',text:'Editing on '}),b);return}
- const f=el('form',{class:'unlock'}),pi=el('input',{type:'password',placeholder:'Exec passcode','aria-label':'Exec passcode',size:'14'});
+ const f=el('form',{class:'unlock'}),pi=el('input',{type:'password',placeholder:'Team passcode','aria-label':'Team passcode',size:'14'});
  f.append(pi,el('button',{class:'primary',type:'submit',text:'Unlock editing'}));
  f.onsubmit=async e=>{e.preventDefault();pass=pi.value;
   try{const d=await post({action:'check'});if(d.ok){pref('cmwim.pass',pass);showLock();render();say('Editing unlocked.');return}}catch(err){}
@@ -460,11 +500,10 @@ function toISO(v){v=(v||'').trim();if(!v)return '';if(/^\d{4}-\d{2}-\d{2}/.test(
 
 // A Sheet row (display names) to a board task (ids).
 const initId=Object.fromEntries(INITS.map(i=>[i.name.toLowerCase(),i.id]));
-const initKey=v=>{v=(v||'').trim();return v?initId[v.toLowerCase()]||'x:'+v:'_other'};
 const statusId=Object.fromEntries(Object.entries(SLABEL).map(([k,v])=>[v.toLowerCase(),k]));
 const norm=r=>({id:r.id||'',
  title:(r.title||'').trim(),
- initiative:initKey(r.initiative),
+ initiative:(n=>n?initId[n.toLowerCase()]||'x:'+n:'_other')((r.initiative||'').trim()),
  sheetInit:(r.initiative||'').trim(),
  owner:(r.owner||'').trim()||'Unassigned',
  due:toISO(r.due),
@@ -478,9 +517,9 @@ function fromCSV(csv){
 
 pass=API&&pref('cmwim.pass')||null;
 showLock();
-(API?fetch(API).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>{if(d.inits)setInits(d.inits);return d.tasks.map(norm).filter(t=>t.title)})
+(API?fetch(API).then(r=>{if(!r.ok)throw r.status;return r.json()}).then(d=>{setMeta(d.initiatives);return d.tasks.map(norm).filter(t=>t.title)})
     :fetch(SHEET,{cache:'no-store'}).then(r=>{if(!r.ok)throw r.status;return r.text()}).then(fromCSV))
- .then(d=>{tasks=d;refreshOwners();fillInits();render()})
+ .then(d=>{tasks=d;refreshOwners();render()})
  .catch(()=>{loadFailed=true;render()});
 </script>
 </body>

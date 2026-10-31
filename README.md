@@ -12,6 +12,8 @@ The **Tasks** tab of the [CMWIM task sheet](https://docs.google.com/spreadsheets
 
 The board writes to the Sheet through [`apps-script/Code.gs`](apps-script/Code.gs), deployed from the Sheet as a web app (Extensions → Apps Script, then Deploy → Web app, execute as me, access: anyone). The passcode is the `PASSCODE` script property. The web app URL goes in `API` in `index.html`; while `API` is empty the board is read-only.
 
+After changing `Code.gs`, paste it into the Sheet's Apps Script editor and redeploy with Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy. That keeps the same URL.
+
 The timeline shades the no-event dates (exams, Ramadan, Eid) listed in `AVOID` in `index.html`.
 
 Everything depends on team capacity and member interest, so events can be scaled back, pushed to next year or dropped.
